@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Shader Demo</title>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            overflow: hidden;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100vh;
+            display: block;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-family: monospace;
+            min-width: 250px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 3px;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        select {
+            width: 100%;
+            padding: 5px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+        button {
+            width: 100%;
+            padding: 8px;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+        .btn-export {
+            background: #4CAF50;
+        }
+        .btn-import {
+            background: #2196F3;
+        }
+        .divider {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #444;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="controls">
+        <h3>Water Shader Controls</h3>
+        
+        <div class="control-group">
+            <label>Time Speed: <span id="timeSpeedValue">0.5</span></label>
+            <input type="range" id="timeSpeed" min="0" max="2" step="0.1" value="0.5">
+        </div>
+        
+        <div class="control-group">
+            <label>UV Scale X: <span id="uvScaleXValue">1</span></label>
+            <input type="range" id="uvScaleX" min="0.1" max="5" step="0.1" value="1">
+        </div>
+        
+        <div class="control-group">
+            <label>UV Scale Y: <span id="uvScaleYValue">1</span></label>
+            <input type="range" id="uvScaleY" min="0.1" max="5" step="0.1" value="1">
+        </div>
+        
+        <div class="control-group">
+            <label>UV Scale Z: <span id="uvScaleZValue">1</span></label>
+            <input type="range" id="uvScaleZ" min="0.1" max="5" step="0.1" value="1">
+        </div>
+        
+        <div class="control-group">
+            <label>UV Rotation: <span id="uvRotationValue">0</span></label>
+            <input type="range" id="uvRotation" min="0" max="6.28" step="0.1" value="0">
+        </div>
+        
+        <div class="control-group">
+            <label>Alpha: <span id="alphaValue">0.65</span></label>
+            <input type="range" id="alpha" min="0" max="1" step="0.05" value="0.65">
+        </div>
+        
+        <div class="control-group">
+            <label>Dither Scale: <span id="ditherScaleValue">1</span></label>
+            <input type="range" id="ditherScale" min="0.5" max="4" step="0.1" value="1">
+        </div>
+        
+        <div class="control-group">
+            <label>
+                <input type="checkbox" id="useAlphaHashed"> Use Alpha Hashed
+            </label>
+        </div>
+        
+        <div class="control-group">
+            <label>
+                <input type="checkbox" id="depthWrite"> Depth Write
+            </label>
+        </div>
+        
+        <div class="control-group">
+            <label>
+                <input type="checkbox" id="separateCullingPass"> Separate Culling Pass
+            </label>
+        </div>
+        
+        <div class="control-group">
+            <label>Cull Mode:</label>
+            <select id="cullMode">
+                <option value="none">None (Double Sided)</option>
+                <option value="back" selected>Back (Show Front)</option>
+                <option value="front">Front (Show Back)</option>
+            </select>
+        </div>
+        
+        <div class="divider">
+            <h3>Post-Processing</h3>
+        </div>
+        
+        <div class="control-group">
+            <label>
+                <input type="checkbox" id="enableVignette"> Enable Vignette
+            </label>
+        </div>
+        
+        <div class="control-group">
+            <label>Vignette Size: <span id="vignetteSizeValue">1.0</span></label>
+            <input type="range" id="vignetteSize" min="0.5" max="2" step="0.1" value="1.0">
+        </div>
+        
+        <div class="control-group">
+            <label>Exposure: <span id="exposureValue">1.0</span></label>
+            <input type="range" id="exposure" min="0.1" max="3" step="0.1" value="1.0">
+        </div>
+        
+        <div class="control-group">
+            <label>Gamma: <span id="gammaValue">2.2</span></label>
+            <input type="range" id="gamma" min="1" max="3" step="0.1" value="2.2">
+        </div>
+        
+        <div class="divider">
+            <button class="btn-export" onclick="exportSettings()">Export Settings</button>
+            <input type="file" id="importFile" accept=".json" style="display:none" onchange="importSettings(event)">
+            <button class="btn-import" onclick="document.getElementById('importFile').click()">Import Settings</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('renderCanvas');
+        const engine = new BABYLON.Engine(canvas, true);
+        
+        let waterMaterial = null;
+        let sphere = null;
+        let postProcess = null;
+        
+        const params = {
+            timeSpeed: 0.5,
+            alpha: 0.65,
+            uvScaleX: 1.0,
+            uvScaleY: 1.0,
+            uvScaleZ: 1.0,
+            uvRotation: 0.0,
+            useAlphaHashed: false,
+            depthWrite: false,
+            separateCullingPass: true,
+            cullMode: 'back',
+            ditherScale: 1.0,
+            enableVignette: false,
+            vignetteSize: 1.0,
+            exposure: 1.0,
+            gamma: 2.2
+        };
+        
+        const createScene = () => {
+            const scene = new BABYLON.Scene(engine);
+            scene.clearColor = new BABYLON.Color4(0.5, 0.7, 0.9, 1);
+            
+            const camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 2, Math.PI / 3, 5, BABYLON.Vector3.Zero(), scene);
+            camera.attachControl(canvas, true);
+            
+            const light = new BABYLON.HemisphericLight('light', new BABYLON.Vector3(0, 1, 0), scene);
+            light.intensity = 0.8;
+            
+            const sunLight = new BABYLON.DirectionalLight('sunLight', new BABYLON.Vector3(-1, -2, -1), scene);
+            sunLight.intensity = 1.2;
+            
+            sphere = BABYLON.MeshBuilder.CreatePlane('plane', { size: 3, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene);
+            sphere.rotation.x = Math.PI / 2; // Rotate to be horizontal
+            
+            createWaterMaterial(scene);
+            createPostProcessing(camera, scene);
+            
+            return scene;
+        };
+        
+        const createWaterMaterial = (scene) => {
+            const shaderMaterial = new BABYLON.ShaderMaterial('waterShader', scene, {
+                vertexSource: `
+                    precision highp float;
+                    attribute vec3 position;
+                    attribute vec2 uv;
+                    uniform mat4 worldViewProjection;
+                    varying vec2 vUV;
+                    varying vec4 vPosition;
+                    
+                    void main(void) {
+                        gl_Position = worldViewProjection * vec4(position, 1.0);
+                        vUV = uv;
+                        vPosition = gl_Position;
+                    }
+                `,
+                fragmentSource: `
+                    precision highp float;
+                    varying vec2 vUV;
+                    varying vec4 vPosition;
+                    uniform float iTime;
+                    uniform vec3 uvScale;
+                    uniform float uvRotation;
+                    uniform float alphaValue;
+                    uniform float useAlphaHashed;
+                    uniform float ditherScale;
+                    
+                    #define PI 3.14159265359
+                    
+                    vec2 rotateUV(vec2 uv, float rotation) {
+                        float mid = 0.5;
+                        return vec2(
+                            cos(rotation) * (uv.x - mid) + sin(rotation) * (uv.y - mid) + mid,
+                            cos(rotation) * (uv.y - mid) - sin(rotation) * (uv.x - mid) + mid
+                        );
+                    }
+                    
+                    float bayerDither8x8(vec2 screenPos) {
+                        int x = int(mod(screenPos.x, 8.0));
+                        int y = int(mod(screenPos.y, 8.0));
+                        int index = x + y * 8;
+                        float bayerValues[64];
+                        bayerValues[0] = 0.0; bayerValues[1] = 32.0; bayerValues[2] = 8.0; bayerValues[3] = 40.0;
+                        bayerValues[4] = 2.0; bayerValues[5] = 34.0; bayerValues[6] = 10.0; bayerValues[7] = 42.0;
+                        bayerValues[8] = 48.0; bayerValues[9] = 16.0; bayerValues[10] = 56.0; bayerValues[11] = 24.0;
+                        bayerValues[12] = 50.0; bayerValues[13] = 18.0; bayerValues[14] = 58.0; bayerValues[15] = 26.0;
+                        bayerValues[16] = 12.0; bayerValues[17] = 44.0; bayerValues[18] = 4.0; bayerValues[19] = 36.0;
+                        bayerValues[20] = 14.0; bayerValues[21] = 46.0; bayerValues[22] = 6.0; bayerValues[23] = 38.0;
+                        bayerValues[24] = 60.0; bayerValues[25] = 28.0; bayerValues[26] = 52.0; bayerValues[27] = 20.0;
+                        bayerValues[28] = 62.0; bayerValues[29] = 30.0; bayerValues[30] = 54.0; bayerValues[31] = 22.0;
+                        bayerValues[32] = 3.0; bayerValues[33] = 35.0; bayerValues[34] = 11.0; bayerValues[35] = 43.0;
+                        bayerValues[36] = 1.0; bayerValues[37] = 33.0; bayerValues[38] = 9.0; bayerValues[39] = 41.0;
+                        bayerValues[40] = 51.0; bayerValues[41] = 19.0; bayerValues[42] = 59.0; bayerValues[43] = 27.0;
+                        bayerValues[44] = 49.0; bayerValues[45] = 17.0; bayerValues[46] = 57.0; bayerValues[47] = 25.0;
+                        bayerValues[48] = 15.0; bayerValues[49] = 47.0; bayerValues[50] = 7.0; bayerValues[51] = 39.0;
+                        bayerValues[52] = 13.0; bayerValues[53] = 45.0; bayerValues[54] = 5.0; bayerValues[55] = 37.0;
+                        bayerValues[56] = 63.0; bayerValues[57] = 31.0; bayerValues[58] = 55.0; bayerValues[59] = 23.0;
+                        bayerValues[60] = 61.0; bayerValues[61] = 29.0; bayerValues[62] = 53.0; bayerValues[63] = 21.0;
+                        return (bayerValues[index] + 0.5) / 64.0;
+                    }
+                    
+                    // Smooth noise from Castaway
+                    vec2 SmoothNoise22(vec2 p) {
+                        vec2 i = floor(p);
+                        vec2 f = fract(p);
+                        f = f * f * (3.0 - 2.0 * f);
+                        float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453);
+                        float b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
+                        float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+                        float d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+                        return vec2(
+                            mix(mix(a, b, f.x), mix(c, d, f.x), f.y),
+                            mix(mix(a, b, f.x), mix(c, d, f.x), f.y)
+                        );
+                    }
+                    
+                    // Water wave shape from Castaway
+                    float Water_WaveShape(vec2 uv, float chop) {
+                        uv += SmoothNoise22(uv * 0.6) * 2.0;
+                        vec2 w = sin(uv * 2.0) * 0.5 + 0.5;
+                        w = 1.0 - pow(1.0 - w, vec2(chop));
+                        float h = (w.x + w.y) * 0.5;
+                        return h;
+                    }
+                    
+                    // Water waves from Castaway
+                    float Water_GetWaves(vec2 mapPos, float time) {
+                        float a = 1.0;
+                        float h = 0.0;
+                        float tot = 0.0;
+                        float r = 2.5;
+                        mat2 rm = mat2(cos(r), -sin(r), sin(r), cos(r)) * 2.1;
+                        vec2 aPos = mapPos;
+                        float waveTime = time;
+                        float chopA = 0.7;
+                        float chopB = 0.9;
+                        int maxOctaveCount = 5;
+                        
+                        for (int octave = 0; octave < maxOctaveCount; octave++) {
+                            float chop = mix(chopA, chopB, float(octave) / float(maxOctaveCount - 1));
+                            h += Water_WaveShape(aPos + waveTime, chop) * a;
+                            tot += a;
+                            aPos = aPos * rm;
+                            a *= 0.3;
+                            waveTime *= 1.6;
+                        }
+                        return h / tot;
+                    }
+                    
+                    void main(void) {
+                        vec2 uv = rotateUV(vUV, uvRotation);
+                        vec2 mapPos = uv * uvScale.xy * 4.0;
+                        
+                        float waves = Water_GetWaves(mapPos, iTime);
+                        
+                        // Water colors
+                        vec3 deepWater = vec3(0.0, 0.2, 0.4);
+                        vec3 shallowWater = vec3(0.0, 0.5, 0.7);
+                        vec3 foam = vec3(0.8, 0.9, 1.0);
+                        
+                        vec3 colour = mix(deepWater, shallowWater, waves);
+                        colour = mix(colour, foam, smoothstep(0.7, 0.9, waves));
+                        
+                        if (useAlphaHashed > 0.5) {
+                            vec2 screenPos = gl_FragCoord.xy * ditherScale;
+                            float dither = bayerDither8x8(screenPos);
+                            if (alphaValue < dither) {
+                                discard;
+                            }
+                            gl_FragColor = vec4(colour, 1.0);
+                        } else {
+                            gl_FragColor = vec4(colour, alphaValue);
+                        }
+                    }
+                `
+            }, {
+                attributes: ['position', 'uv'],
+                uniforms: ['worldViewProjection', 'iTime', 'uvScale', 'uvRotation', 'alphaValue', 'useAlphaHashed', 'ditherScale']
+            });
+            
+            updateMaterial(shaderMaterial);
+            
+            sphere.material = shaderMaterial;
+            waterMaterial = shaderMaterial;
+        };
+        
+        const createPostProcessing = (camera, scene) => {
+            postProcess = new BABYLON.PostProcess("postFX", "postFX", 
+                ["vignetteSize", "exposure", "gamma", "enableVignette"], 
+                null, 1.0, camera, BABYLON.Texture.BILINEAR_SAMPLINGMODE, engine, false,
+                `
+                precision highp float;
+                varying vec2 vUV;
+                uniform sampler2D textureSampler;
+                uniform float vignetteSize;
+                uniform float exposure;
+                uniform float gamma;
+                uniform float enableVignette;
+                
+                float Vignette(vec2 uv, float size) {
+                    float d = length((uv - 0.5) * 2.0) / length(vec2(1.0));
+                    d /= size;
+                    float s = d * d * (3.0 - 2.0 * d);
+                    float v = mix(d, s, 0.6);
+                    return max(0.0, 1.0 - v);
+                }
+                
+                vec3 PostProcessColour(vec3 color, float exp, float gam) {
+                    color = color * exp;
+                    color = 1.0 - exp(-color);
+                    color = pow(color, vec3(1.0 / gam));
+                    return color;
+                }
+                
+                void main(void) {
+                    vec3 color = texture2D(textureSampler, vUV).rgb;
+                    
+                    if (enableVignette > 0.5) {
+                        color *= 0.2 + 0.8 * Vignette(vUV, vignetteSize);
+                    }
+                    
+                    color = PostProcessColour(color, exposure, gamma);
+                    
+                    gl_FragColor = vec4(color, 1.0);
+                }
+                `
+            );
+            
+            updatePostProcess();
+        };
+        
+        const updatePostProcess = () => {
+            if (postProcess) {
+                postProcess.onApply = (effect) => {
+                    effect.setFloat("vignetteSize", params.vignetteSize);
+                    effect.setFloat("exposure", params.exposure);
+                    effect.setFloat("gamma", params.gamma);
+                    effect.setFloat("enableVignette", params.enableVignette ? 1.0 : 0.0);
+                };
+            }
+        };
+        
+        const updateMaterial = (material) => {
+            material.setFloat('iTime', 0);
+            material.setVector3('uvScale', new BABYLON.Vector3(params.uvScaleX, params.uvScaleY, params.uvScaleZ));
+            material.setFloat('uvRotation', params.uvRotation);
+            material.setFloat('alphaValue', params.alpha);
+            material.setFloat('useAlphaHashed', params.useAlphaHashed ? 1.0 : 0.0);
+            material.setFloat('ditherScale', params.ditherScale);
+            
+            if (params.cullMode === 'back') {
+                material.backFaceCulling = true;
+                material.sideOrientation = 0;
+            } else if (params.cullMode === 'front') {
+                material.backFaceCulling = true;
+                material.sideOrientation = 1;
+            } else {
+                material.backFaceCulling = false;
+                material.sideOrientation = 2;
+            }
+            
+            if (params.useAlphaHashed) {
+                material.needAlphaTesting = () => true;
+                material.needAlphaBlending = () => false;
+                material.disableDepthWrite = !params.depthWrite;
+                material.forceDepthWrite = params.depthWrite;
+                material.transparencyMode = 1;
+            } else {
+                material.needAlphaTesting = () => false;
+                material.needAlphaBlending = () => true;
+                material.disableDepthWrite = !params.depthWrite;
+                material.transparencyMode = 2;
+            }
+            
+            material.separateCullingPass = params.separateCullingPass;
+        };
+        
+        const scene = createScene();
+        
+        engine.runRenderLoop(() => {
+            if (waterMaterial) {
+                waterMaterial.setFloat('iTime', performance.now() / 1000 * params.timeSpeed);
+            }
+            scene.render();
+        });
+        
+        window.addEventListener('resize', () => {
+            engine.resize();
+        });
+        
+        // Control handlers
+        const setupControls = () => {
+            const controls = {
+                timeSpeed: document.getElementById('timeSpeed'),
+                uvScaleX: document.getElementById('uvScaleX'),
+                uvScaleY: document.getElementById('uvScaleY'),
+                uvScaleZ: document.getElementById('uvScaleZ'),
+                uvRotation: document.getElementById('uvRotation'),
+                alpha: document.getElementById('alpha'),
+                ditherScale: document.getElementById('ditherScale'),
+                useAlphaHashed: document.getElementById('useAlphaHashed'),
+                depthWrite: document.getElementById('depthWrite'),
+                separateCullingPass: document.getElementById('separateCullingPass'),
+                cullMode: document.getElementById('cullMode')
+            };
+            
+            Object.keys(controls).forEach(key => {
+                const element = controls[key];
+                if (element.type === 'range') {
+                    element.addEventListener('input', (e) => {
+                        params[key] = parseFloat(e.target.value);
+                        document.getElementById(key + 'Value').textContent = e.target.value;
+                        updateMaterial(waterMaterial);
+                    });
+                } else if (element.type === 'checkbox') {
+                    element.addEventListener('change', (e) => {
+                        params[key] = e.target.checked;
+                        updateMaterial(waterMaterial);
+                    });
+                } else if (element.tagName === 'SELECT') {
+                    element.addEventListener('change', (e) => {
+                        params[key] = e.target.value;
+                        updateMaterial(waterMaterial);
+                    });
+                }
+            });
+            
+            // Post-processing controls
+            document.getElementById('enableVignette').addEventListener('change', (e) => {
+                params.enableVignette = e.target.checked;
+                updatePostProcess();
+            });
+            
+            document.getElementById('vignetteSize').addEventListener('input', (e) => {
+                params.vignetteSize = parseFloat(e.target.value);
+                document.getElementById('vignetteSizeValue').textContent = e.target.value;
+                updatePostProcess();
+            });
+            
+            document.getElementById('exposure').addEventListener('input', (e) => {
+                params.exposure = parseFloat(e.target.value);
+                document.getElementById('exposureValue').textContent = e.target.value;
+                updatePostProcess();
+            });
+            
+            document.getElementById('gamma').addEventListener('input', (e) => {
+                params.gamma = parseFloat(e.target.value);
+                document.getElementById('gammaValue').textContent = e.target.value;
+                updatePostProcess();
+            });
+            });
+        };
+        
+        const exportSettings = () => {
+            const dataStr = JSON.stringify(params, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            const exportFileDefaultName = 'water-shader-settings.json';
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        };
+        
+        const importSettings = (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const imported = JSON.parse(e.target.result);
+                        Object.assign(params, imported);
+                        
+                        // Update UI
+                        Object.keys(params).forEach(key => {
+                            const element = document.getElementById(key);
+                            if (element) {
+                                if (element.type === 'range') {
+                                    element.value = params[key];
+                                    document.getElementById(key + 'Value').textContent = params[key];
+                                } else if (element.type === 'checkbox') {
+                                    element.checked = params[key];
+                                } else if (element.tagName === 'SELECT') {
+                                    element.value = params[key];
+                                }
+                            }
+                        });
+                        
+                        updateMaterial(waterMaterial);
+                    } catch (err) {
+                        console.error('Failed to import settings:', err);
+                        alert('Failed to import settings');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        };
+        
+        setupControls();
+    </script>
+</body>
+</html>

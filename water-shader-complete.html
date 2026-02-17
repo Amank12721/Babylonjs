@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Advanced Water Shader - Complete</title>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: monospace; }
+    canvas { width: 100%; height: 100%; display: block; }
+    #controls {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 15px;
+      border-radius: 8px;
+      font-size: 12px;
+      max-height: 90vh;
+      overflow-y: auto;
+      min-width: 280px;
+    }
+    h3 { margin-top: 0; margin-bottom: 15px; }
+    h4 { margin-top: 15px; margin-bottom: 10px; font-size: 13px; border-top: 1px solid #444; padding-top: 15px; }
+    label { display: block; margin-bottom: 5px; }
+    input[type="range"] { width: 100%; }
+    input[type="color"] { width: 100%; height: 30px; cursor: pointer; }
+    button { width: 100%; padding: 8px; margin-bottom: 8px; border: none; border-radius: 4px; cursor: pointer; color: white; }
+    .btn-purple { background: #9C27B0; }
+    .btn-green { background: #4CAF50; }
+    .btn-blue { background: #2196F3; }
+    select { width: 100%; padding: 5px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; margin-top: 5px; }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+  <div id="controls">
+    <h3>Advanced Water Shader</h3>
+
+    <div>
+      <label>Time Speed: <span id="timeSpeed">0.4</span></label>
+      <input type="range" id="timeSpeedSlider" min="0" max="2" step="0.1" value="0.4">
+    </div>
+    
+    <div>
+      <label>UV Scale X: <span id="uvScaleX">1.4</span></label>
+      <input type="range" id="uvScaleXSlider" min="0.1" max="5" step="0.1" value="1.4">
+    </div>
+    
+    <div>
+      <label>UV Scale Y: <span id="uvScaleY">1.2</span></label>
+      <input type="range" id="uvScaleYSlider" min="0.1" max="5" step="0.1" value="1.2">
+    </div>
+    
+    <div>
+      <label>UV Scale Z: <span id="uvScaleZ">1.5</span></label>
+      <input type="range" id="uvScaleZSlider" min="0.1" max="5" step="0.1" value="1.5">
+    </div>
+    
+    <div>
+      <label>UV Rotation: <span id="uvRotation">0.60</span></label>
+      <input type="range" id="uvRotationSlider" min="0" max="6.28" step="0.1" value="0.6">
+    </div>
+    
+    <div>
+      <label>Alpha: <span id="alpha">1.00</span></label>
+      <input type="range" id="alphaSlider" min="0" max="1" step="0.05" value="1">
+    </div>
+    
+    <div>
+      <label>Dither Scale: <span id="ditherScale">2.0</span></label>
+      <input type="range" id="ditherScaleSlider" min="0.5" max="4" step="0.1" value="2">
+    </div>
+
+    <h4>Shore Foam</h4>
+    <div>
+      <label><input type="checkbox" id="useVertexGroup" checked> Use Vertex Group</label>
+    </div>
+    
+    <div>
+      <label>Foam Amount: <span id="foamAmount">0.70</span></label>
+      <input type="range" id="foamAmountSlider" min="0" max="1" step="0.05" value="0.7">
+    </div>
+    
+    <div>
+      <label>Foam Threshold: <span id="foamThreshold">0.20</span></label>
+      <input type="range" id="foamThresholdSlider" min="0" max="1" step="0.05" value="0.2">
+    </div>
+    
+    <div>
+      <label>Foam Sharpness: <span id="foamSharpness">1.0</span></label>
+      <input type="range" id="foamSharpnessSlider" min="1" max="10" step="0.5" value="1">
+    </div>
+    
+    <h4>Water Colors</h4>
+    <div>
+      <label>Deep Water Color</label>
+      <input type="color" id="deepWaterColor" value="#004080">
+    </div>
+    
+    <div>
+      <label>Shallow Water Color</label>
+      <input type="color" id="shallowWaterColor" value="#00b3cc">
+    </div>
+    
+    <div>
+      <label>Foam Color</label>
+      <input type="color" id="foamColor" value="#f2faff">
+    </div>
+    
+    <div>
+      <label>Roughness: <span id="roughness">0.50</span></label>
+      <input type="range" id="roughnessSlider" min="0" max="1" step="0.05" value="0.5">
+    </div>
+
+    <h4>Wave Displacement</h4>
+    <div>
+      <label>Wave Amplitude: <span id="waveAmplitude">0.30</span></label>
+      <input type="range" id="waveAmplitudeSlider" min="0" max="2" step="0.05" value="0.3">
+    </div>
+    
+    <div>
+      <label>Wave Frequency: <span id="waveFrequency">1.00</span></label>
+      <input type="range" id="waveFrequencySlider" min="0.1" max="3" step="0.1" value="1">
+    </div>
+    
+    <h4>Texture Noise (Foam Ripples)</h4>
+    <div>
+      <label><input type="checkbox" id="useTextureNoise"> Use Texture Noise</label>
+    </div>
+    
+    <div>
+      <label>Noise Scale: <span id="textureNoiseScale">1.00</span></label>
+      <input type="range" id="textureNoiseScaleSlider" min="0.1" max="10" step="0.1" value="1">
+    </div>
+    
+    <div>
+      <label>Noise Strength: <span id="textureNoiseStrength">0.50</span></label>
+      <input type="range" id="textureNoiseStrengthSlider" min="0" max="1" step="0.05" value="0.5">
+    </div>
+    
+    <div>
+      <label>Noise Speed: <span id="textureNoiseSpeed">0.20</span></label>
+      <input type="range" id="textureNoiseSpeedSlider" min="0" max="2" step="0.1" value="0.2">
+    </div>
+    
+    <h4>Transparency</h4>
+    <div>
+      <label><input type="checkbox" id="useAlphaHashed" checked> Use Alpha Hashed</label>
+    </div>
+    
+    <div>
+      <label>Cull Mode:</label>
+      <select id="cullMode">
+        <option value="none" selected>None (Double Sided)</option>
+        <option value="back">Back (Show Front)</option>
+        <option value="front">Front (Show Back)</option>
+      </select>
+    </div>
+    
+    <div>
+      <label><input type="checkbox" id="depthWrite" checked> Depth Write</label>
+    </div>
+
+    <h4>Actions</h4>
+    <button class="btn-purple" id="resetBtn">Reset to Default</button>
+    <button class="btn-green" id="exportBtn">Export Settings JSON</button>
+    <button class="btn-blue" id="importBtn">Import Settings JSON</button>
+    <input type="file" id="importFile" accept=".json" style="display:none">
+  </div>
+
+  <script>
+    // Initialize Babylon.js
+    const canvas = document.getElementById('renderCanvas');
+    const engine = new BABYLON.Engine(canvas, true);
+    const scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color4(0.5, 0.7, 0.9, 1);
+
+    // Camera
+    const camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 2, Math.PI / 3, 10, BABYLON.Vector3.Zero(), scene);
+    camera.attachControl(canvas, true);
+
+    // Lighting
+    const hemiLight = new BABYLON.HemisphericLight('hemiLight', new BABYLON.Vector3(0, 1, 0), scene);
+    hemiLight.intensity = 0.8;
+
+    const sunLight = new BABYLON.DirectionalLight('sunLight', new BABYLON.Vector3(-1, -2, -1), scene);
+    sunLight.intensity = 1.2;
+
+    // Create water plane
+    const waterPlane = BABYLON.MeshBuilder.CreateGround('water', { width: 10, height: 10, subdivisions: 100 }, scene);
+
+    // Generate noise texture
+    const noiseSize = 256;
+    const noiseData = new Uint8Array(noiseSize * noiseSize * 4);
+    for (let y = 0; y < noiseSize; y++) {
+      for (let x = 0; x < noiseSize; x++) {
+        let value = 0, amplitude = 1.0, frequency = 1.0, maxValue = 0;
+        for (let octave = 0; octave < 6; octave++) {
+          const sampleX = (x / noiseSize) * frequency;
+          const sampleY = (y / noiseSize) * frequency;
+          const noise = (Math.sin(sampleX * 12.9898 + sampleY * 78.233) * 43758.5453) % 1.0;
+          value += Math.abs(noise) * amplitude;
+          maxValue += amplitude;
+          amplitude *= 0.5;
+          frequency *= 2.0;
+        }
+        value /= maxValue;
+        const i = (y * noiseSize + x) * 4;
+        noiseData[i] = noiseData[i + 1] = noiseData[i + 2] = value * 255;
+        noiseData[i + 3] = 255;
+      }
+    }
+    
+    const noiseTexture = new BABYLON.RawTexture(noiseData, noiseSize, noiseSize, BABYLON.Engine.TEXTUREFORMAT_RGBA, scene, false, true, BABYLON.Texture.TRILINEAR_SAMPLINGMODE);
+    noiseTexture.wrapU = noiseTexture.wrapV = BABYLON.Texture.WRAP_ADDRESSMODE;
+
+    // Water shader vertex code
+    const vertexShader = `
+      precision highp float;
+      attribute vec3 position;
+      attribute vec2 uv;
+      uniform mat4 worldViewProjection;
+      uniform mat4 world;
+      uniform float iTime;
+      uniform vec3 uvScale;
+      uniform float waveAmplitude;
+      uniform float waveFrequency;
+      varying vec2 vUV;
+      varying vec4 vPosition;
+      varying vec3 vWorldPos;
+      
+      vec2 SmoothNoise22(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453);
+        float b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
+        float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+        float d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+        return vec2(
+          mix(mix(a, b, f.x), mix(c, d, f.x), f.y),
+          mix(mix(a, b, f.x), mix(c, d, f.x), f.y)
+        );
+      }
+      
+      float Water_WaveShape(vec2 uv, float chop) {
+        uv += SmoothNoise22(uv * 0.6) * 2.0;
+        vec2 w = sin(uv * 2.0) * 0.5 + 0.5;
+        w = 1.0 - pow(1.0 - w, vec2(chop));
+        return (w.x + w.y) * 0.5;
+      }
+      
+      float Water_GetWaves(vec2 mapPos, float time) {
+        float a = 1.0, h = 0.0, tot = 0.0, r = 2.5;
+        mat2 rm = mat2(cos(r), -sin(r), sin(r), cos(r)) * 2.1;
+        vec2 aPos = mapPos;
+        float waveTime = time, chopA = 0.7, chopB = 0.9;
+        for (int octave = 0; octave < 5; octave++) {
+          float chop = mix(chopA, chopB, float(octave) / 4.0);
+          h += Water_WaveShape(aPos + waveTime, chop) * a;
+          tot += a;
+          aPos = aPos * rm;
+          a *= 0.3;
+          waveTime *= 1.6;
+        }
+        return h / tot;
+      }
+      
+      void main() {
+        vec2 mapPos = uv * uvScale.xy * 4.0 * waveFrequency;
+        float waveHeight = Water_GetWaves(mapPos, iTime);
+        vec3 finalPosition = position;
+        finalPosition.y += (waveHeight - 0.5) * waveAmplitude;
+        gl_Position = worldViewProjection * vec4(finalPosition, 1.0);
+        vUV = uv;
+        vPosition = gl_Position;
+        vWorldPos = (world * vec4(finalPosition, 1.0)).xyz;
+      }
+    `;
+
+    // Water shader fragment code
+    const fragmentShader = `
+      precision highp float;
+      varying vec2 vUV;
+      varying vec4 vPosition;
+      uniform float iTime;
+      uniform vec3 uvScale;
+      uniform float uvRotation;
+      uniform float alphaValue;
+      uniform float useAlphaHashed;
+      uniform float ditherScale;
+      uniform float foamAmount;
+      uniform float foamThreshold;
+      uniform float foamSharpness;
+      uniform float useVertexGroup;
+      uniform vec3 deepWaterColor;
+      uniform vec3 shallowWaterColor;
+      uniform vec3 foamColor;
+      uniform float roughness;
+      uniform float useTextureNoise;
+      uniform float textureNoiseScale;
+      uniform float textureNoiseStrength;
+      uniform float textureNoiseSpeed;
+      uniform sampler2D noiseTexture;
+      
+      vec2 rotateUV(vec2 uv, float rotation) {
+        float mid = 0.5;
+        return vec2(
+          cos(rotation) * (uv.x - mid) + sin(rotation) * (uv.y - mid) + mid,
+          cos(rotation) * (uv.y - mid) - sin(rotation) * (uv.x - mid) + mid
+        );
+      }
+      
+      float bayerDither8x8(vec2 screenPos) {
+        int x = int(mod(screenPos.x, 8.0));
+        int y = int(mod(screenPos.y, 8.0));
+        int index = x + y * 8;
+        float bayerValues[64];
+        bayerValues[0]=0.0;bayerValues[1]=32.0;bayerValues[2]=8.0;bayerValues[3]=40.0;
+        bayerValues[4]=2.0;bayerValues[5]=34.0;bayerValues[6]=10.0;bayerValues[7]=42.0;
+        bayerValues[8]=48.0;bayerValues[9]=16.0;bayerValues[10]=56.0;bayerValues[11]=24.0;
+        bayerValues[12]=50.0;bayerValues[13]=18.0;bayerValues[14]=58.0;bayerValues[15]=26.0;
+        bayerValues[16]=12.0;bayerValues[17]=44.0;bayerValues[18]=4.0;bayerValues[19]=36.0;
+        bayerValues[20]=14.0;bayerValues[21]=46.0;bayerValues[22]=6.0;bayerValues[23]=38.0;
+        bayerValues[24]=60.0;bayerValues[25]=28.0;bayerValues[26]=52.0;bayerValues[27]=20.0;
+        bayerValues[28]=62.0;bayerValues[29]=30.0;bayerValues[30]=54.0;bayerValues[31]=22.0;
+        bayerValues[32]=3.0;bayerValues[33]=35.0;bayerValues[34]=11.0;bayerValues[35]=43.0;
+        bayerValues[36]=1.0;bayerValues[37]=33.0;bayerValues[38]=9.0;bayerValues[39]=41.0;
+        bayerValues[40]=51.0;bayerValues[41]=19.0;bayerValues[42]=59.0;bayerValues[43]=27.0;
+        bayerValues[44]=49.0;bayerValues[45]=17.0;bayerValues[46]=57.0;bayerValues[47]=25.0;
+        bayerValues[48]=15.0;bayerValues[49]=47.0;bayerValues[50]=7.0;bayerValues[51]=39.0;
+        bayerValues[52]=13.0;bayerValues[53]=45.0;bayerValues[54]=5.0;bayerValues[55]=37.0;
+        bayerValues[56]=63.0;bayerValues[57]=31.0;bayerValues[58]=55.0;bayerValues[59]=23.0;
+        bayerValues[60]=61.0;bayerValues[61]=29.0;bayerValues[62]=53.0;bayerValues[63]=21.0;
+        return (bayerValues[index] + 0.5) / 64.0;
+      }
+
+      vec2 SmoothNoise22(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453);
+        float b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
+        float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+        float d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+        return vec2(
+          mix(mix(a, b, f.x), mix(c, d, f.x), f.y),
+          mix(mix(a, b, f.x), mix(c, d, f.x), f.y)
+        );
+      }
+      
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+      }
+      
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
+      
+      float Water_WaveShape(vec2 uv, float chop) {
+        uv += SmoothNoise22(uv * 0.6) * 2.0;
+        vec2 w = sin(uv * 2.0) * 0.5 + 0.5;
+        w = 1.0 - pow(1.0 - w, vec2(chop));
+        return (w.x + w.y) * 0.5;
+      }
+      
+      float Water_GetWaves(vec2 mapPos, float time) {
+        float a = 1.0, h = 0.0, tot = 0.0, r = 2.5;
+        mat2 rm = mat2(cos(r), -sin(r), sin(r), cos(r)) * 2.1;
+        vec2 aPos = mapPos;
+        float waveTime = time, chopA = 0.7, chopB = 0.9;
+        for (int octave = 0; octave < 5; octave++) {
+          float chop = mix(chopA, chopB, float(octave) / 4.0);
+          h += Water_WaveShape(aPos + waveTime, chop) * a;
+          tot += a;
+          aPos = aPos * rm;
+          a *= 0.3;
+          waveTime *= 1.6;
+        }
+        return h / tot;
+      }
+
+      void main() {
+        vec2 uv = rotateUV(vUV, uvRotation);
+        vec2 mapPos = uv * uvScale.xy * 4.0;
+        float waves = Water_GetWaves(mapPos, iTime);
+        float roughWaves = mix(waves, pow(waves, 1.0 + roughness * 2.0), roughness);
+        
+        float foamNoise = noise(mapPos * 8.0 + iTime * 0.5);
+        foamNoise += noise(mapPos * 16.0 - iTime * 0.3) * 0.5;
+        foamNoise /= 1.5;
+        
+        if (useTextureNoise > 0.5) {
+          vec2 noiseUV1 = vUV * textureNoiseScale;
+          noiseUV1 += iTime * textureNoiseSpeed * 0.05;
+          vec2 noiseUV2 = vUV * textureNoiseScale * 2.3;
+          noiseUV2 -= iTime * textureNoiseSpeed * 0.03;
+          float texNoise1 = texture2D(noiseTexture, noiseUV1).r;
+          float texNoise2 = texture2D(noiseTexture, noiseUV2).r;
+          float texNoise = texNoise1 * 0.6 + texNoise2 * 0.4;
+          foamNoise = mix(foamNoise, texNoise, textureNoiseStrength);
+        }
+        
+        float foamMask = 0.0;
+        if (useVertexGroup > 0.5) {
+          vec2 edgeDist = abs(vUV - 0.5) * 2.0;
+          foamMask = max(edgeDist.x, edgeDist.y);
+          foamMask = smoothstep(0.6, 1.0, foamMask);
+        }
+        
+        float waveFoam = smoothstep(foamThreshold, 1.0, roughWaves);
+        float combinedFoam = waveFoam * 0.3 + foamMask * foamAmount;
+        combinedFoam = smoothstep(0.3, 0.7, combinedFoam + foamNoise * 0.3);
+        combinedFoam = pow(combinedFoam, foamSharpness);
+        
+        vec3 colour = mix(deepWaterColor, shallowWaterColor, roughWaves * 0.7);
+        colour = mix(colour, foamColor, combinedFoam);
+        
+        if (useAlphaHashed > 0.5) {
+          vec2 screenPos = gl_FragCoord.xy * ditherScale;
+          float dither = bayerDither8x8(screenPos);
+          if (alphaValue < dither) discard;
+          gl_FragColor = vec4(colour, 1.0);
+        } else {
+          gl_FragColor = vec4(colour, alphaValue);
+        }
+      }
+    `;
+
+    // Create shader material
+    BABYLON.Effect.ShadersStore["waterVertexShader"] = vertexShader;
+    BABYLON.Effect.ShadersStore["waterFragmentShader"] = fragmentShader;
+    
+    const waterMaterial = new BABYLON.ShaderMaterial("waterShader", scene, {
+      vertex: "water",
+      fragment: "water",
+    }, {
+      attributes: ["position", "uv"],
+      uniforms: ["worldViewProjection", "world", "iTime", "uvScale", "uvRotation", "alphaValue", 
+                 "useAlphaHashed", "ditherScale", "foamAmount", "foamThreshold", "foamSharpness",
+                 "useVertexGroup", "deepWaterColor", "shallowWaterColor", "foamColor", "roughness",
+                 "waveAmplitude", "waveFrequency", "useTextureNoise", "textureNoiseScale",
+                 "textureNoiseStrength", "textureNoiseSpeed"],
+      samplers: ["noiseTexture"]
+    });
+    
+    waterMaterial.backFaceCulling = false;
+    waterMaterial.needAlphaTesting = () => true;
+    waterMaterial.setTexture("noiseTexture", noiseTexture);
+    waterPlane.material = waterMaterial;
+
+    // Default parameters
+    const params = {
+      timeSpeed: 0.4, uvScaleX: 1.4, uvScaleY: 1.2, uvScaleZ: 1.5, uvRotation: 0.6,
+      alpha: 1, ditherScale: 2, foamAmount: 0.7, foamThreshold: 0.2, foamSharpness: 1,
+      useVertexGroup: true, deepWaterR: 0.0, deepWaterG: 0.25, deepWaterB: 0.5,
+      shallowWaterR: 0.0, shallowWaterG: 0.7, shallowWaterB: 0.8,
+      foamR: 0.95, foamG: 0.98, foamB: 1.0, roughness: 0.5,
+      waveAmplitude: 0.3, waveFrequency: 1.0, useTextureNoise: false,
+      textureNoiseScale: 1.0, textureNoiseStrength: 0.5, textureNoiseSpeed: 0.2,
+      useAlphaHashed: true, cullMode: 'none', depthWrite: true
+    };
+    
+    // Update shader uniforms
+    function updateShader() {
+      waterMaterial.setFloat('iTime', performance.now() / 1000 * params.timeSpeed);
+      waterMaterial.setVector3('uvScale', new BABYLON.Vector3(params.uvScaleX, params.uvScaleY, params.uvScaleZ));
+      waterMaterial.setFloat('uvRotation', params.uvRotation);
+      waterMaterial.setFloat('alphaValue', params.alpha);
+      waterMaterial.setFloat('useAlphaHashed', params.useAlphaHashed ? 1.0 : 0.0);
+      waterMaterial.setFloat('ditherScale', params.ditherScale);
+      waterMaterial.setFloat('foamAmount', params.foamAmount);
+      waterMaterial.setFloat('foamThreshold', params.foamThreshold);
+      waterMaterial.setFloat('foamSharpness', params.foamSharpness);
+      waterMaterial.setFloat('useVertexGroup', params.useVertexGroup ? 1.0 : 0.0);
+      waterMaterial.setVector3('deepWaterColor', new BABYLON.Vector3(params.deepWaterR, params.deepWaterG, params.deepWaterB));
+      waterMaterial.setVector3('shallowWaterColor', new BABYLON.Vector3(params.shallowWaterR, params.shallowWaterG, params.shallowWaterB));
+      waterMaterial.setVector3('foamColor', new BABYLON.Vector3(params.foamR, params.foamG, params.foamB));
+      waterMaterial.setFloat('roughness', params.roughness);
+      waterMaterial.setFloat('waveAmplitude', params.waveAmplitude);
+      waterMaterial.setFloat('waveFrequency', params.waveFrequency);
+      waterMaterial.setFloat('useTextureNoise', params.useTextureNoise ? 1.0 : 0.0);
+      waterMaterial.setFloat('textureNoiseScale', params.textureNoiseScale);
+      waterMaterial.setFloat('textureNoiseStrength', params.textureNoiseStrength);
+      waterMaterial.setFloat('textureNoiseSpeed', params.textureNoiseSpeed);
+    }
+
+    // UI Controls
+    function setupControl(id, param, formatter = (v) => v.toFixed(2)) {
+      const slider = document.getElementById(id + 'Slider');
+      const display = document.getElementById(id);
+      if (slider && display) {
+        slider.addEventListener('input', (e) => {
+          params[param] = parseFloat(e.target.value);
+          display.textContent = formatter(params[param]);
+        });
+      }
+    }
+    
+    setupControl('timeSpeed', 'timeSpeed');
+    setupControl('uvScaleX', 'uvScaleX');
+    setupControl('uvScaleY', 'uvScaleY');
+    setupControl('uvScaleZ', 'uvScaleZ');
+    setupControl('uvRotation', 'uvRotation');
+    setupControl('alpha', 'alpha');
+    setupControl('ditherScale', 'ditherScale');
+    setupControl('foamAmount', 'foamAmount');
+    setupControl('foamThreshold', 'foamThreshold');
+    setupControl('foamSharpness', 'foamSharpness', (v) => v.toFixed(1));
+    setupControl('roughness', 'roughness');
+    setupControl('waveAmplitude', 'waveAmplitude');
+    setupControl('waveFrequency', 'waveFrequency');
+    setupControl('textureNoiseScale', 'textureNoiseScale');
+    setupControl('textureNoiseStrength', 'textureNoiseStrength');
+    setupControl('textureNoiseSpeed', 'textureNoiseSpeed');
+    
+    document.getElementById('useVertexGroup').addEventListener('change', (e) => {
+      params.useVertexGroup = e.target.checked;
+    });
+    
+    document.getElementById('useTextureNoise').addEventListener('change', (e) => {
+      params.useTextureNoise = e.target.checked;
+    });
+    
+    document.getElementById('useAlphaHashed').addEventListener('change', (e) => {
+      params.useAlphaHashed = e.target.checked;
+    });
+    
+    document.getElementById('depthWrite').addEventListener('change', (e) => {
+      params.depthWrite = e.target.checked;
+    });
+
+    // Color pickers
+    function hexToRgb(hex) {
+      const r = parseInt(hex.slice(1, 3), 16) / 255;
+      const g = parseInt(hex.slice(3, 5), 16) / 255;
+      const b = parseInt(hex.slice(5, 7), 16) / 255;
+      return { r, g, b };
+    }
+    
+    document.getElementById('deepWaterColor').addEventListener('input', (e) => {
+      const rgb = hexToRgb(e.target.value);
+      params.deepWaterR = rgb.r;
+      params.deepWaterG = rgb.g;
+      params.deepWaterB = rgb.b;
+    });
+    
+    document.getElementById('shallowWaterColor').addEventListener('input', (e) => {
+      const rgb = hexToRgb(e.target.value);
+      params.shallowWaterR = rgb.r;
+      params.shallowWaterG = rgb.g;
+      params.shallowWaterB = rgb.b;
+    });
+    
+    document.getElementById('foamColor').addEventListener('input', (e) => {
+      const rgb = hexToRgb(e.target.value);
+      params.foamR = rgb.r;
+      params.foamG = rgb.g;
+      params.foamB = rgb.b;
+    });
+    
+    // Export/Import
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const dataStr = JSON.stringify(params, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      const link = document.createElement('a');
+      link.setAttribute('href', dataUri);
+      link.setAttribute('download', 'water-settings.json');
+      link.click();
+    });
+    
+    document.getElementById('importBtn').addEventListener('click', () => {
+      document.getElementById('importFile').click();
+    });
+    
+    document.getElementById('importFile').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const imported = JSON.parse(event.target.result);
+            Object.assign(params, imported);
+            alert('Settings imported successfully!');
+          } catch (err) {
+            alert('Failed to import settings.');
+          }
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    // Render loop
+    engine.runRenderLoop(() => {
+      updateShader();
+      scene.render();
+    });
+    
+    window.addEventListener('resize', () => {
+      engine.resize();
+    });
+  </script>
+</body>
+</html>
