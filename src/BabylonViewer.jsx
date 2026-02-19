@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { 
   Engine, Scene, ArcRotateCamera, Vector3, SceneLoader, 
   HemisphericLight, DirectionalLight, Color3,
-  MeshBuilder, StandardMaterial, Color4, ShaderMaterial, Vector2, RawTexture, Texture, ShadowGenerator
+  MeshBuilder, StandardMaterial, Color4, ShaderMaterial, Vector2, RawTexture, Texture, ShadowGenerator,
+  WebXRDefaultExperience, WebXRState
 } from '@babylonjs/core';
 import '@babylonjs/loaders/glTF/2.0';
 
@@ -10,7 +11,7 @@ import '@babylonjs/loaders/glTF/2.0';
 const defaultWaterParams = {
   timeSpeed: 0.4,
   intensity: 0.005,
-  alpha: 1,
+  alpha: 0.4,
   uvScaleX: 1.4,
   uvScaleY: 1.2,
   uvScaleZ: 1.5,
@@ -48,7 +49,7 @@ const defaultWaterParams = {
   textureNoiseSpeed: 0.2,
   // Shadow parameters
   shadowDarkness: 0.7,
-  shadowBlur: 32,
+  shadowBlur: 8,  // Reduced from 32 for better performance
   // Visualizer
   showVertexWeights: false
 };
@@ -76,6 +77,9 @@ export default function BabylonViewer() {
   const [error, setError] = useState(null);
   const [waterParams, setWaterParams] = useState(loadSavedSettings);
   const [showControls, setShowControls] = useState(false); // Hidden by default
+  const [fps, setFps] = useState(0);
+  const [vrSupported, setVrSupported] = useState(false);
+  const [inVR, setInVR] = useState(false);
   const waterMaterialRef = useRef(null);
   const sceneRef = useRef(null);
   const waterMeshRef = useRef(null);
@@ -679,16 +683,82 @@ export default function BabylonViewer() {
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    const engine = new Engine(canvasRef.current, true);
+    const engine = new Engine(canvasRef.current, true, {
+      preserveDrawingBuffer: false,
+      stencil: false,
+      antialias: true,
+      powerPreference: "high-performance"
+    });
     const scene = new Scene(engine);
     sceneRef.current = scene;
     scene.clearColor = new Color4(0.5, 0.7, 0.9, 1);
+    
+    // Performance optimizations
+    scene.autoClear = false;
+    scene.autoClearDepthAndStencil = false;
+    engine.enableOfflineSupport = false;
     
     // Enable depth pre-pass for better transparency sorting
     scene.setRenderingAutoClearDepthStencil(1, true, true, true);
 
     const camera = new ArcRotateCamera('camera', -Math.PI / 2, Math.PI / 3, 10, Vector3.Zero(), scene);
     camera.attachControl(canvasRef.current, true);
+    camera.lowerRadiusLimit = 2;
+    camera.upperRadiusLimit = 50;
+
+    // WASD Keyboard Controls
+    const keys = { w: false, a: false, s: false, d: false, shift: false, space: false };
+    const moveSpeed = 0.3;
+    const fastMoveSpeed = 0.6;
+    
+    window.addEventListener('keydown', (e) => {
+      const key = e.key.toLowerCase();
+      if (key === 'w') keys.w = true;
+      if (key === 'a') keys.a = true;
+      if (key === 's') keys.s = true;
+      if (key === 'd') keys.d = true;
+      if (key === 'shift') keys.shift = true;
+      if (key === ' ') keys.space = true;
+    });
+    
+    window.addEventListener('keyup', (e) => {
+      const key = e.key.toLowerCase();
+      if (key === 'w') keys.w = false;
+      if (key === 'a') keys.a = false;
+      if (key === 's') keys.s = false;
+      if (key === 'd') keys.d = false;
+      if (key === 'shift') keys.shift = false;
+      if (key === ' ') keys.space = false;
+    });
+    
+    // Update camera position based on WASD input
+    scene.onBeforeRenderObservable.add(() => {
+      const speed = keys.shift ? fastMoveSpeed : moveSpeed;
+      
+      // Get camera forward and right vectors
+      const forward = camera.target.subtract(camera.position).normalize();
+      const right = Vector3.Cross(forward, Vector3.Up()).normalize();
+      
+      // Move camera target (what we're looking at)
+      if (keys.w) {
+        camera.target.addInPlace(forward.scale(speed));
+      }
+      if (keys.s) {
+        camera.target.addInPlace(forward.scale(-speed));
+      }
+      if (keys.a) {
+        camera.target.addInPlace(right.scale(speed));
+      }
+      if (keys.d) {
+        camera.target.addInPlace(right.scale(-speed));
+      }
+      if (keys.space) {
+        camera.target.y += speed * 0.5;
+      }
+      if (keys.shift && !keys.w && !keys.s && !keys.a && !keys.d) {
+        camera.target.y -= speed * 0.5;
+      }
+    });
 
     // Sky-like lighting
     const hemiLight = new HemisphericLight('hemiLight', new Vector3(0, 1, 0), scene);
@@ -699,11 +769,12 @@ export default function BabylonViewer() {
     sunLight.intensity = 1.2;
     sunLight.position = new Vector3(20, 40, 20);
     
-    // Enable shadows
-    const shadowGenerator = new ShadowGenerator(2048, sunLight);
+    // Enable shadows with optimized settings
+    const shadowGenerator = new ShadowGenerator(1024, sunLight); // Reduced from 2048
     shadowGenerator.useBlurExponentialShadowMap = true;
     shadowGenerator.blurKernel = waterParams.shadowBlur;
     shadowGenerator.darkness = waterParams.shadowDarkness;
+    shadowGenerator.filteringQuality = ShadowGenerator.QUALITY_LOW; // Performance boost
     shadowGeneratorRef.current = shadowGenerator;
 
     // Create advanced procedural sky with clouds
@@ -922,7 +993,24 @@ export default function BabylonViewer() {
     // Add cache buster to force reload GLB
     const cacheBuster = `?v=${Date.now()}`;
     SceneLoader.Append('/Blender/', `secne.glb${cacheBuster}`, scene, 
-      (loadedScene) => {
+      async (loadedScene) => {
+        console.log('=== SCENE LOADED ===');
+        console.log('Total meshes:', scene.meshes.length);
+        console.log('Total materials:', scene.materials.length);
+        console.log('Total textures:', scene.textures.length);
+        
+        // Log all materials
+        console.log('\n=== MATERIALS ===');
+        scene.materials.forEach((mat, idx) => {
+          console.log(`Material ${idx}: ${mat.name} (${mat.getClassName()})`);
+        });
+        
+        // Log all textures
+        console.log('\n=== TEXTURES ===');
+        scene.textures.forEach((tex, idx) => {
+          console.log(`Texture ${idx}: ${tex.name} - ${tex.url || 'procedural'}`);
+        });
+        
         const objects = [];
         
         console.log('=== ANIMATION DEBUG START ===');
@@ -1144,6 +1232,11 @@ export default function BabylonViewer() {
               console.log(`Mesh "${mesh.name}" has NO morphTargetManager`);
             }
 
+            // Calculate triangle count
+            const indices = mesh.getIndices();
+            const triangles = indices ? indices.length / 3 : 0;
+            const vertices = mesh.getTotalVertices();
+
             objects.push({
               name: mesh.name,
               id: mesh.id,
@@ -1151,7 +1244,9 @@ export default function BabylonViewer() {
               rotation: mesh.rotation.asArray(),
               scaling: mesh.scaling.asArray(),
               customProperties: customProps,
-              morphTargets: morphTargets
+              morphTargets: morphTargets,
+              triangles: triangles,
+              vertices: vertices
             });
 
             // Apply water shader to water mesh
@@ -1188,81 +1283,197 @@ export default function BabylonViewer() {
               
               waterMeshRef.current = mesh;
               
-              // Load and apply saved vertex group data if available
-              try {
-                const savedVertexData = localStorage.getItem('waterVertexGroupData');
-                if (savedVertexData) {
-                  const vertexGroupData = JSON.parse(savedVertexData);
-                  console.log('Loading saved vertex group data:', vertexGroupData);
+              // Always load vertex group data from JSON file
+              (async () => {
+                try {
+                  console.log('Loading vertex group data from JSON file...');
+                  const response = await fetch('/Blender/secne_vertex_groups.json');
+                  
+                  if (!response.ok) {
+                    throw new Error(`Failed to load vertex groups: ${response.status}`);
+                  }
+                  
+                  const vertexGroupData = await response.json();
+                  console.log('✅ Loaded vertex group data from file:', vertexGroupData);
                   
                   if (vertexGroupData.water) {
                     const waterData = vertexGroupData.water;
                     const positions = mesh.getVerticesData('position');
-                    const vertexCount = positions.length / 3;
-                    const colors = new Float32Array(vertexCount * 4);
-                    
-                    // Initialize with defaults
-                    for (let i = 0; i < vertexCount; i++) {
-                      colors[i * 4] = 0.0;     // R = foam (default no foam)
-                      colors[i * 4 + 1] = 0.0; // G = waves (default no waves if not painted)
-                      colors[i * 4 + 2] = 0.0; // B
-                      colors[i * 4 + 3] = 1.0; // A
-                    }
-                    
-                    // Apply foam vertex group
-                    if (waterData.vertex_groups && waterData.vertex_groups.foam && waterData.vertices) {
-                      const foamMap = new Map();
-                      waterData.vertices.forEach(vertex => {
-                        const foamGroup = vertex.groups?.find(g => g.name === 'foam');
-                        if (foamGroup) {
-                          foamMap.set(vertex.index, foamGroup.weight);
-                        }
-                      });
-                      
-                      for (let i = 0; i < vertexCount; i++) {
-                        const weight = foamMap.get(i);
-                        if (weight !== undefined) {
-                          colors[i * 4] = weight; // R = foam weight
-                        }
-                      }
-                    }
-                    
-                    // Apply waves vertex group
-                    if (waterData.vertex_groups && waterData.vertex_groups.waves && waterData.vertices) {
-                      const wavesMap = new Map();
-                      waterData.vertices.forEach(vertex => {
-                        const wavesGroup = vertex.groups?.find(g => g.name === 'waves');
-                        if (wavesGroup) {
-                          wavesMap.set(vertex.index, wavesGroup.weight);
-                        }
-                      });
-                      
-                      for (let i = 0; i < vertexCount; i++) {
-                        const weight = wavesMap.get(i);
-                        if (weight !== undefined) {
-                          colors[i * 4 + 1] = weight; // G = wave weight
-                        }
-                      }
-                    }
-                    
-                    mesh.setVerticesData('color', colors);
-                    console.log('Auto-applied saved vertex group data (foam + waves)');
+                  const vertexCount = positions.length / 3;
+                  const colors = new Float32Array(vertexCount * 4);
+                  
+                  // Initialize with defaults
+                  for (let i = 0; i < vertexCount; i++) {
+                    colors[i * 4] = 0.0;     // R = foam (default no foam)
+                    colors[i * 4 + 1] = 0.0; // G = waves (default no waves if not painted)
+                    colors[i * 4 + 2] = 0.0; // B
+                    colors[i * 4 + 3] = 1.0; // A
                   }
+                  
+                  // Apply foam vertex group
+                  if (waterData.vertex_groups && waterData.vertex_groups.foam && waterData.vertices) {
+                    const foamMap = new Map();
+                    waterData.vertices.forEach(vertex => {
+                      const foamGroup = vertex.groups?.find(g => g.name === 'foam');
+                      if (foamGroup) {
+                        foamMap.set(vertex.index, foamGroup.weight);
+                      }
+                    });
+                    
+                    for (let i = 0; i < vertexCount; i++) {
+                      const weight = foamMap.get(i);
+                      if (weight !== undefined) {
+                        colors[i * 4] = weight; // R = foam weight
+                      }
+                    }
+                    console.log('✅ Applied foam vertex group');
+                  }
+                  
+                  // Apply waves vertex group
+                  if (waterData.vertex_groups && waterData.vertex_groups.waves && waterData.vertices) {
+                    const wavesMap = new Map();
+                    waterData.vertices.forEach(vertex => {
+                      const wavesGroup = vertex.groups?.find(g => g.name === 'waves');
+                      if (wavesGroup) {
+                        wavesMap.set(vertex.index, wavesGroup.weight);
+                      }
+                    });
+                    
+                    for (let i = 0; i < vertexCount; i++) {
+                      const weight = wavesMap.get(i);
+                      if (weight !== undefined) {
+                        colors[i * 4 + 1] = weight; // G = wave weight
+                      }
+                    }
+                    console.log('✅ Applied waves vertex group');
+                  }
+                  
+                  mesh.setVerticesData('color', colors);
+                  console.log('✅ Applied vertex group data to water mesh (foam + waves)');
+                } else {
+                  console.warn('⚠️ No water data found in vertex groups JSON');
                 }
-              } catch (err) {
-                console.error('Failed to load saved vertex group data:', err);
-              }
-              
-              createWaterMaterial(mesh, scene);
+                } catch (err) {
+                  console.error('❌ Failed to load vertex group data from JSON:', err);
+                  console.log('Water will render without vertex group painting');
+                }
+                
+                createWaterMaterial(mesh, scene);
+              })(); // End of async IIFE
             } else {
               // Set other meshes to rendering group 0
               mesh.renderingGroupId = 0;
+              
+              // Log material info for debugging
+              console.log(`Mesh "${mesh.name}" material:`, {
+                hasMaterial: !!mesh.material,
+                materialName: mesh.material?.name,
+                materialType: mesh.material?.getClassName(),
+                isVisible: mesh.isVisible,
+                isEnabled: mesh.isEnabled()
+              });
+              
+              // Ensure mesh is visible
+              mesh.isVisible = true;
+              
+              // If material exists, log texture info
+              if (mesh.material) {
+                const mat = mesh.material;
+                console.log(`  Material details:`, {
+                  albedoTexture: mat.albedoTexture?.name || 'none',
+                  diffuseTexture: mat.diffuseTexture?.name || 'none',
+                  baseTexture: mat.baseTexture?.name || 'none',
+                  hasTextures: scene.textures.length
+                });
+              }
             }
           }
         });
 
         setObjectInfo(objects);
         console.log('Loaded objects:', objects);
+        
+        // Setup WebXR (VR/AR support) after scene is loaded
+        const setupVR = async () => {
+          try {
+            console.log('🔍 Checking WebXR support...');
+            
+            // Check if WebXR is available
+            if (!navigator.xr) {
+              console.warn('❌ navigator.xr not available - WebXR not supported by this browser');
+              console.log('💡 Try Chrome or Edge browser for WebXR support');
+              setVrSupported(false);
+              return;
+            }
+            
+            // Check if immersive VR is supported
+            const vrSupported = await navigator.xr.isSessionSupported('immersive-vr');
+            console.log('VR Session Support:', vrSupported);
+            
+            if (!vrSupported) {
+              console.warn('⚠️ Immersive VR not supported');
+              console.log('💡 To test without headset:');
+              console.log('   1. Open DevTools (F12)');
+              console.log('   2. Click ⋮ menu → More tools → WebXR');
+              console.log('   3. Select a VR device and enable');
+              setVrSupported(false);
+              return;
+            }
+            
+            console.log('Initializing WebXR...');
+            
+            // Create WebXR experience with floor meshes for teleportation
+            const floorMeshes = scene.meshes.filter(m => 
+              m.name.toLowerCase().includes('beach') || 
+              m.name.toLowerCase().includes('ground') ||
+              m.name.toLowerCase().includes('floor')
+            );
+            
+            const xrHelper = await WebXRDefaultExperience.CreateAsync(scene, {
+              floorMeshes: floorMeshes,
+              disableDefaultUI: false,
+              disableTeleportation: false
+            });
+            
+            if (xrHelper) {
+              setVrSupported(true);
+              console.log('✅ WebXR initialized successfully!');
+              console.log('🥽 VR button should appear in bottom-right corner');
+              console.log('📱 Click the VR button to enter VR mode');
+              
+              // Track VR state changes
+              xrHelper.baseExperience.onStateChangedObservable.add((state) => {
+                console.log('WebXR state changed:', state);
+                if (state === WebXRState.IN_XR) {
+                  setInVR(true);
+                  console.log('🥽 Entered VR mode');
+                } else if (state === WebXRState.NOT_IN_XR) {
+                  setInVR(false);
+                  console.log('👓 Exited VR mode');
+                }
+              });
+              
+              // Enable teleportation if available
+              if (xrHelper.teleportation) {
+                console.log('✅ Teleportation enabled');
+              }
+              
+              // Enable pointer selection if available
+              if (xrHelper.pointerSelection) {
+                console.log('✅ Pointer selection enabled');
+              }
+            }
+          } catch (error) {
+            console.error('❌ WebXR initialization failed:', error);
+            console.log('💡 Possible reasons:');
+            console.log('   - Browser doesn\'t support WebXR');
+            console.log('   - No VR device detected');
+            console.log('   - WebXR flags not enabled');
+            setVrSupported(false);
+          }
+        };
+        
+        setupVR();
       },
       null,
       (scene, message, exception) => {
@@ -1271,11 +1482,26 @@ export default function BabylonViewer() {
       }
     );
 
+    // FPS tracking
+    let lastTime = performance.now();
+    let frameCount = 0;
+    
     engine.runRenderLoop(() => {
       if (waterMaterialRef.current) {
         waterMaterialRef.current.setFloat('iTime', performance.now() / 1000 * waterParams.timeSpeed);
       }
       scene.render();
+      
+      // Update FPS every 30 frames
+      frameCount++;
+      if (frameCount >= 30) {
+        const currentTime = performance.now();
+        const delta = currentTime - lastTime;
+        const currentFps = Math.round((frameCount * 1000) / delta);
+        setFps(currentFps);
+        frameCount = 0;
+        lastTime = currentTime;
+      }
     });
 
     const handleResize = () => engine.resize();
@@ -1291,8 +1517,43 @@ export default function BabylonViewer() {
     <>
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
       
+      {/* FPS Counter */}
+      <div style={{
+        position: 'absolute',
+        top: 10,
+        left: 10,
+        background: 'rgba(0, 0, 0, 0.7)',
+        color: fps < 30 ? '#ff4444' : fps < 50 ? '#ffaa00' : '#44ff44',
+        padding: '8px 12px',
+        borderRadius: '4px',
+        fontFamily: 'monospace',
+        fontSize: '16px',
+        fontWeight: 'bold'
+      }}>
+        FPS: {fps}
+      </div>
+      
+      {/* VR Status Indicator */}
+      {inVR && (
+        <div style={{
+          position: 'absolute',
+          top: 10,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(76, 175, 80, 0.9)',
+          color: 'white',
+          padding: '8px 16px',
+          borderRadius: '4px',
+          fontFamily: 'monospace',
+          fontSize: '14px',
+          fontWeight: 'bold'
+        }}>
+          🥽 VR MODE ACTIVE
+        </div>
+      )}
+      
       {/* Keyboard hint when controls are hidden */}
-      {!showControls && (
+      {!showControls && !inVR && (
         <div style={{
           position: 'absolute',
           top: 20,
@@ -1304,7 +1565,30 @@ export default function BabylonViewer() {
           fontSize: '12px',
           fontFamily: 'monospace'
         }}>
-          Press Ctrl+Q to show controls
+          <div>🎮 Controls:</div>
+          <div style={{ marginTop: '5px', fontSize: '11px' }}>
+            • WASD - Move camera
+          </div>
+          <div style={{ fontSize: '11px' }}>
+            • Shift - Move faster
+          </div>
+          <div style={{ fontSize: '11px' }}>
+            • Space - Move up
+          </div>
+          <div style={{ fontSize: '11px' }}>
+            • Mouse - Look around
+          </div>
+          <div style={{ fontSize: '11px' }}>
+            • Scroll - Zoom in/out
+          </div>
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #555' }}>
+            Ctrl+Q - Water controls
+          </div>
+          {vrSupported && (
+            <div style={{ marginTop: '5px', color: '#4CAF50' }}>
+              🥽 VR Ready - Look for VR button ↘️
+            </div>
+          )}
         </div>
       )}
       
@@ -1325,6 +1609,28 @@ export default function BabylonViewer() {
         overflowY: 'auto'
       }}>
         <h3 style={{ marginTop: 0, marginBottom: '15px' }}>Water Controls</h3>
+        
+        {/* VR Button - Only show if WebXR is supported */}
+        {vrSupported && (
+          <div style={{ marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid #444' }}>
+            <div style={{ 
+              fontSize: '11px', 
+              color: '#aaa', 
+              marginBottom: '8px',
+              textAlign: 'center'
+            }}>
+              {inVR ? '🥽 VR Active' : '🥽 VR Ready'}
+            </div>
+            <div style={{ 
+              fontSize: '10px', 
+              color: '#888', 
+              marginBottom: '8px',
+              textAlign: 'center'
+            }}>
+              Use your VR headset's button to enter/exit VR mode
+            </div>
+          </div>
+        )}
         
         <div style={{ marginBottom: '10px' }}>
           <label>Time Speed: {waterParams.timeSpeed}</label>
@@ -2017,11 +2323,25 @@ export default function BabylonViewer() {
           fontFamily: 'monospace',
           maxWidth: '300px'
         }}>
-          <h3 style={{ marginTop: 0 }}>Objects ({objectInfo.length})</h3>
+          <h3 style={{ marginTop: 0 }}>Scene Stats</h3>
+          <div style={{ marginBottom: '15px', paddingBottom: '10px', borderBottom: '1px solid #555' }}>
+            <div style={{ color: '#2196F3' }}>
+              Total Tris: {objectInfo.reduce((sum, obj) => sum + (obj.triangles || 0), 0).toLocaleString()}
+            </div>
+            <div style={{ color: '#2196F3' }}>
+              Total Verts: {objectInfo.reduce((sum, obj) => sum + (obj.vertices || 0), 0).toLocaleString()}
+            </div>
+            <div style={{ color: '#4CAF50' }}>
+              Objects: {objectInfo.length}
+            </div>
+          </div>
+          <h3 style={{ marginTop: 0 }}>Objects</h3>
           {objectInfo.map((obj, idx) => (
             <div key={idx} style={{ marginBottom: '15px', borderBottom: '1px solid #444', paddingBottom: '10px' }}>
               <div style={{ fontWeight: 'bold', color: '#4CAF50' }}>{obj.name}</div>
               <div>ID: {obj.id}</div>
+              <div style={{ color: '#2196F3' }}>Tris: {obj.triangles?.toLocaleString() || 0}</div>
+              <div style={{ color: '#2196F3' }}>Verts: {obj.vertices?.toLocaleString() || 0}</div>
               {obj.morphTargets && obj.morphTargets.length > 0 && (
                 <div style={{ marginTop: '5px' }}>
                   <div style={{ color: '#FF9800' }}>Shape Keys ({obj.morphTargets.length}):</div>
