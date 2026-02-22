@@ -1,5 +1,8 @@
 # Beach Viewer - BabylonJS Water Shader Demo
 
+![Uploading image.png…]()
+
+
 A 3D beach scene viewer built with React and BabylonJS, featuring advanced water shader effects with vertex group-based foam and wave control.
 
 ## Features
