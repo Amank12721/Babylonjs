@@ -100,7 +100,3 @@ To export vertex groups from Blender with your GLB file:
 ## Live Demo
 
 [View on Cloudflare Pages](https://beach-viewer.pages.dev)
-
-## License
-
-MIT
